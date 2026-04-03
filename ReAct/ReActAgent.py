@@ -64,7 +64,7 @@ class ReActAgent:
             thought, action = self._parse_output(response_text)
 
             if thought:
-                print(f"思考: {thought}")
+                print(f"🤔思考: {thought}")
 
             if not action:
                 print("警告:未能解析出有效的Action，流程终止。")
