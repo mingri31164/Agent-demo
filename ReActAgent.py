@@ -25,7 +25,7 @@ History: {history}
 """
 
 class ReActAgent:
-    def __init__(self, llm_client: HelloAgentsLLM, tool_executor: ToolExecutor, max_steps: int = 5):
+    def __init__(self, llm_client: HelloAgentsLLM, tool_executor: ToolExecutor, max_steps: int = 10):
         self.llm_client = llm_client
         self.tool_executor = tool_executor
         self.max_steps = max_steps
@@ -73,9 +73,14 @@ class ReActAgent:
             # 4. 执行Action
             if action.startswith("Finish"):
                 # 如果是Finish指令，提取最终答案并结束
-                final_answer = re.match(r"Finish\[(.*)\]", action).group(1)
-                print(f"🎉 最终答案: {final_answer}")
-                return final_answer
+                finish_match = re.match(r"Finish\[(.*)\]", action, re.DOTALL)
+                if finish_match:
+                    final_answer = finish_match.group(1).strip()
+                    print(f"🎉 最终答案: {final_answer}")
+                    return final_answer
+                else:
+                    print(f"警告:无法解析Finish内容: {action}，流程终止。")
+                    break
 
             tool_name, tool_input = self._parse_action(action)
             if not tool_name or not tool_input:
@@ -89,16 +94,14 @@ class ReActAgent:
                 observation = f"错误:未找到名为 '{tool_name}' 的工具。"
             else:
                 observation = tool_function(tool_input)  # 调用真实工具
-                # (这段逻辑紧随工具调用之后，在 while 循环的末尾)
-                print(f"👀 观察: {observation}")
+            print(f"👀 观察: {observation}")
+            # 将本轮的Action和Observation添加到历史记录中
+            self.history.append(f"Action: {action}")
+            self.history.append(f"Observation: {observation}")
 
-                # 将本轮的Action和Observation添加到历史记录中
-                self.history.append(f"Action: {action}")
-                self.history.append(f"Observation: {observation}")
-
-            # 循环结束
-            print("已达到最大步数，流程终止。")
-            return None
+        # 循环正常结束后（达到最大步数）才执行到这里
+        print("已达到最大步数，流程终止。")
+        return None
 
 
     def _parse_output(self, text: str):
@@ -106,8 +109,8 @@ class ReActAgent:
         """
         # Thought: 匹配到 Action: 或文本末尾
         thought_match = re.search(r"Thought:\s*(.*?)(?=\nAction:|$)", text, re.DOTALL)
-        # Action: 匹配到文本末尾
-        action_match = re.search(r"Action:\s*(.*?)$", text, re.DOTALL)
+        # Action: 匹配到文本末尾，支持跨行的 Finish/Search 等所有工具
+        action_match = re.search(r"Action:\s*(.+?)\s*$", text, re.DOTALL)
         thought = thought_match.group(1).strip() if thought_match else None
         action = action_match.group(1).strip() if action_match else None
         return thought, action
